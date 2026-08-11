@@ -1,0 +1,5 @@
+# Local products from CPython and WASI development builds.
+__pycache__/
+*.py[cod]
+/cross-build/
+/Modules/Setup.local
