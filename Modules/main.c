@@ -3,6 +3,7 @@
 #include "Python.h"
 #include "pycore_call.h"          // _PyObject_CallNoArgs()
 #include "pycore_fileutils.h"     // struct _Py_stat_struct
+#include "pycore_fuzzy.h"         // _PyFuzzy_GetMode()
 #include "pycore_import.h"        // _PyImport_Fini2()
 #include "pycore_initconfig.h"    // _PyArgv
 #include "pycore_interp.h"        // _PyInterpreterState.sysdict
@@ -692,6 +693,10 @@ pymain_run_python(int *exitcode)
 
     // import readline and rlcompleter before script dir is added to sys.path
     if (pymain_import_readline(config) < 0) {
+        goto error;
+    }
+
+    if (_PyFuzzy_InitializeRuntime(config) < 0) {
         goto error;
     }
 

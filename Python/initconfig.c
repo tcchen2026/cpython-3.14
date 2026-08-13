@@ -339,6 +339,8 @@ The following implementation-specific options are available:\n\
 -X frozen_modules=[on|off]: whether to use frozen modules; the default is \"on\"\n\
          for installed Python and \"off\" for a local build;\n\
          also PYTHON_FROZEN_MODULES\n\
+-X fuzzy[=0|1]: enable tolerant single-run fuzzy execution; disabled by\n\
+         default\n\
 "
 #ifdef Py_GIL_DISABLED
 "-X gil=[0|1]: enable (1) or disable (0) the GIL; also PYTHON_GIL\n"

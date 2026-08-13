@@ -58,6 +58,7 @@
 #include "frozen_modules/importlib.util.h"
 #include "frozen_modules/importlib.machinery.h"
 #include "frozen_modules/runpy.h"
+#include "frozen_modules/fuzzy_runtime.h"
 #include "frozen_modules/__hello__.h"
 #include "frozen_modules/__phello__.h"
 #include "frozen_modules/__phello__.ham.h"
@@ -92,6 +93,9 @@ static const struct _frozen stdlib_modules[] = {
     {"importlib.util", _Py_M__importlib_util, (int)sizeof(_Py_M__importlib_util), false},
     {"importlib.machinery", _Py_M__importlib_machinery, (int)sizeof(_Py_M__importlib_machinery), false},
     {"runpy", _Py_M__runpy, (int)sizeof(_Py_M__runpy), false},
+
+    /* fuzzy-cpython runtime */
+    {"fuzzy_runtime", _Py_M__fuzzy_runtime, (int)sizeof(_Py_M__fuzzy_runtime), false},
     {0, 0, 0} /* stdlib sentinel */
 };
 static const struct _frozen test_modules[] = {

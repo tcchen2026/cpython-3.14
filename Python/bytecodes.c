@@ -15,6 +15,7 @@
 #include "pycore_code.h"
 #include "pycore_emscripten_signal.h"  // _Py_CHECK_EMSCRIPTEN_SIGNALS
 #include "pycore_function.h"
+#include "pycore_fuzzy.h"        // _PyObject_FuzzyMissingName()
 #include "pycore_instruments.h"
 #include "pycore_interpolation.h" // _PyInterpolation_Build()
 #include "pycore_intrinsics.h"
@@ -265,11 +266,19 @@ dummy_func(
         inst(LOAD_FAST_CHECK, (-- value)) {
             _PyStackRef value_s = GETLOCAL(oparg);
             if (PyStackRef_IsNull(value_s)) {
-                _PyEval_FormatExcCheckArg(tstate, PyExc_UnboundLocalError,
-                    UNBOUNDLOCAL_ERROR_MSG,
-                    PyTuple_GetItem(_PyFrame_GetCode(frame)->co_localsplusnames, oparg)
-                );
-                ERROR_IF(true);
+                PyObject *name = PyTuple_GetItem(
+                    _PyFrame_GetCode(frame)->co_localsplusnames, oparg);
+                PyObject *fuzzy = _PyObject_FuzzyMissingName(name, 1);
+                if (fuzzy == NULL) {
+                    if (!_PyErr_Occurred(tstate)) {
+                        _PyEval_FormatExcCheckArg(
+                            tstate, PyExc_UnboundLocalError,
+                            UNBOUNDLOCAL_ERROR_MSG, name);
+                    }
+                    ERROR_IF(true);
+                }
+                value_s = PyStackRef_FromPyObjectSteal(fuzzy);
+                GETLOCAL(oparg) = value_s;
             }
             value = PyStackRef_DUP(value_s);
         }
@@ -2208,6 +2217,9 @@ dummy_func(
             ERROR_IF(super == NULL);
             PyObject *name = GETITEM(FRAME_CO_NAMES, oparg >> 2);
             PyObject *attr_o = PyObject_GetAttr(super, name);
+            if (attr_o == NULL) {
+                attr_o = _PyObject_FuzzyMissingAttribute(super, name);
+            }
             Py_DECREF(super);
             ERROR_IF(attr_o == NULL);
             attr = PyStackRef_FromPyObjectSteal(attr_o);
@@ -2302,7 +2314,11 @@ dummy_func(
             }
             else {
                 /* Classic, pushes one value. */
-                PyObject *attr_o = PyObject_GetAttr(PyStackRef_AsPyObjectBorrow(owner), name);
+                PyObject *owner_o = PyStackRef_AsPyObjectBorrow(owner);
+                PyObject *attr_o = PyObject_GetAttr(owner_o, name);
+                if (attr_o == NULL) {
+                    attr_o = _PyObject_FuzzyMissingAttribute(owner_o, name);
+                }
                 PyStackRef_CLOSE(owner);
                 ERROR_IF(attr_o == NULL);
                 attr = PyStackRef_FromPyObjectSteal(attr_o);

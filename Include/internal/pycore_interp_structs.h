@@ -880,6 +880,39 @@ struct _is {
     PyConfig config;
     unsigned long feature_flags;
 
+    /* Downstream fuzzy-cpython callbacks captured before user code.  These
+       references are interpreter-owned so replacing builtins or module
+       attributes cannot redirect the bytecode recovery hooks. */
+    struct {
+        PyObject *missing_attribute;
+        PyObject *missing_name;
+        PyObject *value_factory;
+        PyObject *value_provenance_member;
+        PyObject *value_depth_member;
+        PyObject *import_func;
+        PyObject *import_post;
+        PyObject *missing_import;
+        PyObject *module_type;
+        PyObject *events;
+        PyObject *event_sink;
+        PyObject *event_budget_error;
+        PyObject *path_provenances;
+        PyObject *provenance_tokens;
+        PyObject *trusted_value_objects;
+        PyObject *trusted_value_provenances;
+        PyObject *trusted_path_objects;
+        PyObject *trusted_path_provenances;
+        PyObject *trusted_module_objects;
+        PyObject *trusted_module_provenances;
+        PyObject *untrusted_module_objects;
+        PyObject *untrusted_module_provenances;
+        Py_ssize_t event_limit;
+        Py_ssize_t text_limit;
+        Py_ssize_t provenance_depth_limit;
+        int event_budget_exhausted;
+        int event_state_initialized;
+    } fuzzy;
+
     PyObject *dict;  /* Stores per-interpreter state */
 
     PyObject *sysdict_copy;

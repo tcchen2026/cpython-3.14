@@ -561,6 +561,9 @@
     <None Include="..\Lib\runpy.py">
       <Filter>Python Files</Filter>
     </None>
+    <None Include="..\Lib\fuzzy_runtime.py">
+      <Filter>Python Files</Filter>
+    </None>
     <None Include="..\Lib\__hello__.py">
       <Filter>Python Files</Filter>
     </None>

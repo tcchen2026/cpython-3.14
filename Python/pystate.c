@@ -9,6 +9,7 @@
 #include "pycore_critical_section.h" // _PyCriticalSection_Resume()
 #include "pycore_dtoa.h"          // _dtoa_state_INIT()
 #include "pycore_freelist.h"      // _PyObject_ClearFreeLists()
+#include "pycore_fuzzy.h"         // _PyFuzzy_Clear()
 #include "pycore_initconfig.h"    // _PyStatus_OK()
 #include "pycore_interpframe.h"   // _PyThreadState_HasStackSpace()
 #include "pycore_object.h"        // _PyType_InitCache()
@@ -869,6 +870,7 @@ interpreter_clear(PyInterpreterState *interp, PyThreadState *tstate)
     // XXX Make sure we properly deal with problematic finalizers.
 
     Py_CLEAR(interp->audit_hooks);
+    _PyFuzzy_Clear(interp);
 
     // gh-140257: Threads have already been cleared, but daemon threads may
     // still access eval_breaker atomically via take_gil() right before they

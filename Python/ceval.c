@@ -15,9 +15,11 @@
 #include "pycore_floatobject.h"   // _PyFloat_ExactDealloc()
 #include "pycore_frame.h"
 #include "pycore_function.h"
+#include "pycore_fuzzy.h"        // _PyFuzzy_GetMode()
 #include "pycore_genobject.h"     // _PyCoro_GetAwaitableIter()
 #include "pycore_import.h"        // _PyImport_IsDefaultImportFunc()
 #include "pycore_instruments.h"
+#include "pycore_interp.h"       // _PyInterpreterState_GetConfig()
 #include "pycore_interpframe.h"   // _PyFrame_SetStackPointer()
 #include "pycore_interpolation.h" // _PyInterpolation_Build()
 #include "pycore_intrinsics.h"
@@ -1012,6 +1014,8 @@ _Py_LoadAttr_StackRefSteal(
     PyThreadState *tstate, _PyStackRef owner,
     PyObject *name, _PyStackRef *self_or_null)
 {
+    PyObject *owner_obj = PyStackRef_AsPyObjectBorrow(owner);
+    Py_INCREF(owner_obj);
     // Use _PyCStackRefs to ensure that both method and self are visible to
     // the GC. Even though self_or_null is on the evaluation stack, it may be
     // after the stackpointer and therefore not visible to the GC.
@@ -1021,7 +1025,17 @@ _Py_LoadAttr_StackRefSteal(
     self.ref = owner;  // steal reference to owner
     // NOTE: method.ref is initialized to PyStackRef_NULL and remains null on
     // error, so we don't need to explicitly use the return code from the call.
-    _PyObject_GetMethodStackRef(tstate, &self.ref, name, &method.ref);
+    int method_kind = _PyObject_GetMethodStackRef(
+        tstate, &self.ref, name, &method.ref);
+    if (method_kind < 0) {
+        PyObject *fuzzy = _PyObject_FuzzyMissingAttribute(owner_obj, name);
+        if (fuzzy != NULL) {
+            assert(PyStackRef_IsNull(method.ref));
+            assert(PyStackRef_IsNull(self.ref));
+            method.ref = PyStackRef_FromPyObjectSteal(fuzzy);
+        }
+    }
+    Py_DECREF(owner_obj);
     *self_or_null = _PyThreadState_PopCStackRefSteal(tstate, &self);
     return _PyThreadState_PopCStackRefSteal(tstate, &method);
 }
@@ -3118,13 +3132,25 @@ PyObject *
 _PyEval_ImportName(PyThreadState *tstate, _PyInterpreterFrame *frame,
             PyObject *name, PyObject *fromlist, PyObject *level)
 {
+    PyInterpreterState *interp = tstate->interp;
+    const PyConfig *config = _PyInterpreterState_GetConfig(interp);
     PyObject *import_func;
-    if (PyMapping_GetOptionalItem(frame->f_builtins, &_Py_ID(__import__), &import_func) < 0) {
-        return NULL;
+    int fuzzy_import = _PyFuzzy_GetMode(config) == 1
+        && interp->fuzzy.import_func != NULL
+        && interp->fuzzy.import_post != NULL;
+    if (fuzzy_import) {
+        import_func = Py_NewRef(interp->fuzzy.import_func);
     }
-    if (import_func == NULL) {
-        _PyErr_SetString(tstate, PyExc_ImportError, "__import__ not found");
-        return NULL;
+    else {
+        if (PyMapping_GetOptionalItem(
+                frame->f_builtins, &_Py_ID(__import__), &import_func) < 0) {
+            return NULL;
+        }
+        if (import_func == NULL) {
+            _PyErr_SetString(tstate, PyExc_ImportError,
+                             "__import__ not found");
+            return NULL;
+        }
     }
 
     PyObject *locals = frame->f_locals;
@@ -3133,7 +3159,7 @@ _PyEval_ImportName(PyThreadState *tstate, _PyInterpreterFrame *frame,
     }
 
     /* Fast path for not overloaded __import__. */
-    if (_PyImport_IsDefaultImportFunc(tstate->interp, import_func)) {
+    if (!fuzzy_import && _PyImport_IsDefaultImportFunc(interp, import_func)) {
         Py_DECREF(import_func);
         int ilevel = PyLong_AsInt(level);
         if (ilevel == -1 && _PyErr_Occurred(tstate)) {
@@ -3150,6 +3176,22 @@ _PyEval_ImportName(PyThreadState *tstate, _PyInterpreterFrame *frame,
     PyObject* args[5] = {name, frame->f_globals, locals, fromlist, level};
     PyObject *res = PyObject_Vectorcall(import_func, args, 5, NULL);
     Py_DECREF(import_func);
+    if (res == NULL && fuzzy_import) {
+        return _PyObject_FuzzyMissingImport(
+            tstate, name, frame->f_globals, fromlist, level);
+    }
+    if (res != NULL && fuzzy_import) {
+        PyObject *post = Py_NewRef(interp->fuzzy.import_post);
+        PyObject *processed = PyObject_CallFunctionObjArgs(
+            post, res, name, frame->f_globals, locals, fromlist, level, NULL);
+        Py_DECREF(post);
+        if (processed == NULL) {
+            Py_DECREF(res);
+            return NULL;
+        }
+        Py_DECREF(processed);
+        return res;
+    }
     return res;
 }
 
@@ -3161,6 +3203,19 @@ _PyEval_ImportFrom(PyThreadState *tstate, PyObject *v, PyObject *name)
 
     if (PyObject_GetOptionalAttr(v, name, &x) != 0) {
         return x;
+    }
+    const PyConfig *config = _PyInterpreterState_GetConfig(tstate->interp);
+    if (_PyFuzzy_GetMode(config) == 1) {
+        PyErr_Format(PyExc_AttributeError,
+                     "module has no attribute %R", name);
+        x = _PyObject_FuzzyMissingAttribute(v, name);
+        if (x != NULL) {
+            return x;
+        }
+        if (!PyErr_ExceptionMatches(PyExc_AttributeError)) {
+            return NULL;
+        }
+        PyErr_Clear();
     }
     /* Issue #17636: in case this failed because of a circular relative
        import, try to fallback on reading the module directly from
@@ -3608,10 +3663,21 @@ _PyEval_LoadGlobalStackRef(PyObject *globals, PyObject *builtins, PyObject *name
                                     (PyDictObject *)builtins,
                                     name, writeto);
         if (PyStackRef_IsNull(*writeto) && !PyErr_Occurred()) {
-            /* _PyDict_LoadGlobal() returns NULL without raising
-                * an exception if the key doesn't exist */
-            _PyEval_FormatExcCheckArg(PyThreadState_GET(), PyExc_NameError,
-                                        NAME_ERROR_MSG, name);
+            PyObject *fuzzy = _PyObject_FuzzyMissingName(name, 0);
+            if (fuzzy != NULL) {
+                if (PyDict_SetItem(globals, name, fuzzy) < 0) {
+                    Py_DECREF(fuzzy);
+                    return;
+                }
+                *writeto = PyStackRef_FromPyObjectSteal(fuzzy);
+            }
+            else if (!PyErr_Occurred()) {
+                /* _PyDict_LoadGlobal() returns NULL without raising
+                   an exception if the key doesn't exist. */
+                _PyEval_FormatExcCheckArg(
+                    PyThreadState_GET(), PyExc_NameError,
+                    NAME_ERROR_MSG, name);
+            }
         }
     }
     else {
@@ -3629,11 +3695,23 @@ _PyEval_LoadGlobalStackRef(PyObject *globals, PyObject *builtins, PyObject *name
                 return;
             }
             if (res == NULL) {
-                _PyEval_FormatExcCheckArg(
+                res = _PyObject_FuzzyMissingName(name, 0);
+                if (res != NULL) {
+                    if (PyObject_SetItem(globals, name, res) < 0) {
+                        Py_DECREF(res);
+                        *writeto = PyStackRef_NULL;
+                        return;
+                    }
+                }
+                else {
+                    if (!PyErr_Occurred()) {
+                        _PyEval_FormatExcCheckArg(
                             PyThreadState_GET(), PyExc_NameError,
                             NAME_ERROR_MSG, name);
-                *writeto = PyStackRef_NULL;
-                return;
+                    }
+                    *writeto = PyStackRef_NULL;
+                    return;
+                }
             }
         }
         *writeto = PyStackRef_FromPyObjectSteal(res);
@@ -3690,9 +3768,18 @@ _PyEval_LoadName(PyThreadState *tstate, _PyInterpreterFrame *frame, PyObject *na
         return NULL;
     }
     if (value == NULL) {
-        _PyEval_FormatExcCheckArg(
-                    tstate, PyExc_NameError,
-                    NAME_ERROR_MSG, name);
+        value = _PyObject_FuzzyMissingName(name, 0);
+        if (value != NULL) {
+            if (PyObject_SetItem(frame->f_locals, name, value) < 0) {
+                Py_DECREF(value);
+                return NULL;
+            }
+        }
+        else if (!PyErr_Occurred()) {
+            _PyEval_FormatExcCheckArg(
+                tstate, PyExc_NameError,
+                NAME_ERROR_MSG, name);
+        }
     }
     return value;
 }

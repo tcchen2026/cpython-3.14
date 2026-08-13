@@ -18,6 +18,7 @@
 #include "pycore_call.h"          // _PyObject_CallNoArgs()
 #include "pycore_ceval.h"         // _PyEval_ReInitThreads()
 #include "pycore_fileutils.h"     // _Py_closerange()
+#include "pycore_fuzzy.h"         // _PyFuzzy_EmitUnresolvedPath()
 #include "pycore_import.h"        // _PyImport_AcquireLock()
 #include "pycore_initconfig.h"    // _PyStatus_EXCEPTION()
 #include "pycore_long.h"          // _PyLong_IsNegative()
@@ -1403,6 +1404,17 @@ path_converter(PyObject *o, void *p)
                  "expected %.200s.__fspath__() to return str or bytes, "
                  "not %.200s", _PyType_Name(Py_TYPE(o)),
                  _PyType_Name(Py_TYPE(res)));
+            Py_DECREF(res);
+            goto error_exit;
+        }
+
+        int fuzzy_delete_path = path->function_name != NULL
+            && (strcmp(path->function_name, "remove") == 0
+                || strcmp(path->function_name, "unlink") == 0
+                || strcmp(path->function_name, "rmdir") == 0);
+        if (fuzzy_delete_path
+                && _PyFuzzy_PropagateTrustedPath(
+                    _PyInterpreterState_GET(), o, res) < 0) {
             Py_DECREF(res);
             goto error_exit;
         }
@@ -6034,6 +6046,12 @@ os_rmdir_impl(PyObject *module, path_t *path, int dir_fd)
     int unlinkat_unavailable = 0;
 #endif
 
+    int fuzzy = _PyFuzzy_EmitUnresolvedPath(
+        _PyInterpreterState_GET(), path->object, "os.rmdir");
+    if (fuzzy != 0) {
+        return fuzzy > 0 ? Py_NewRef(Py_None) : NULL;
+    }
+
     if (PySys_Audit("os.rmdir", "Oi", path->object,
                     dir_fd == DEFAULT_DIR_FD ? -1 : dir_fd) < 0) {
         return NULL;
@@ -6214,6 +6232,16 @@ os_unlink_impl(PyObject *module, path_t *path, int dir_fd)
 #ifdef HAVE_UNLINKAT
     int unlinkat_unavailable = 0;
 #endif
+
+    const char *operation = path->function_name != NULL
+            && strcmp(path->function_name, "remove") == 0
+        ? "os.remove"
+        : "os.unlink";
+    int fuzzy = _PyFuzzy_EmitUnresolvedPath(
+        _PyInterpreterState_GET(), path->object, operation);
+    if (fuzzy != 0) {
+        return fuzzy > 0 ? Py_NewRef(Py_None) : NULL;
+    }
 
     if (PySys_Audit("os.remove", "Oi", path->object,
                     dir_fd == DEFAULT_DIR_FD ? -1 : dir_fd) < 0) {

@@ -1,0 +1,74 @@
+name: fuzzy-cpython
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzzy-cpython-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-debug:
+    name: native debug (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+
+    steps:
+      - name: Check out the pinned source commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Configure an out-of-tree debug build
+        run: |
+          mkdir build-fuzzy-ci
+          cd build-fuzzy-ci
+          ../configure --with-pydebug
+
+      - name: Verify generated interpreter cases
+        run: |
+          make -C build-fuzzy-ci regen-cases
+          git diff --exit-code -- \
+            Include/opcode_ids.h \
+            Include/internal/pycore_opcode_metadata.h \
+            Include/internal/pycore_uop_ids.h \
+            Include/internal/pycore_uop_metadata.h \
+            Lib/_opcode_metadata.py \
+            Python/executor_cases.c.h \
+            Python/generated_cases.c.h \
+            Python/opcode_targets.h \
+            Python/optimizer_cases.c.h
+
+      - name: Verify frozen runtime metadata
+        run: |
+          make -C build-fuzzy-ci regen-frozen
+          git diff --exit-code -- \
+            Makefile.pre.in \
+            PCbuild/_freeze_module.vcxproj \
+            PCbuild/_freeze_module.vcxproj.filters \
+            Python/frozen.c \
+            Python/frozen_modules/fuzzy_runtime.h
+
+      - name: Build fuzzy-cpython
+        run: make -C build-fuzzy-ci -j2
+
+      - name: Run downstream and affected standard-mode tests
+        run: |
+          build-fuzzy-ci/python -m test -j2 --fail-env-changed \
+            test_fuzzy_runtime \
+            test_cmd_line \
+            test_builtin \
+            test_descr \
+            test_import \
+            test_scope

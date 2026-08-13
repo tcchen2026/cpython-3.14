@@ -1731,6 +1731,7 @@ FROZEN_FILES_IN = \
 		Lib/importlib/util.py \
 		Lib/importlib/machinery.py \
 		Lib/runpy.py \
+		Lib/fuzzy_runtime.py \
 		Lib/__hello__.py \
 		Lib/__phello__/__init__.py \
 		Lib/__phello__/ham/__init__.py \
@@ -1756,6 +1757,7 @@ FROZEN_FILES_OUT = \
 		Python/frozen_modules/importlib.util.h \
 		Python/frozen_modules/importlib.machinery.h \
 		Python/frozen_modules/runpy.h \
+		Python/frozen_modules/fuzzy_runtime.h \
 		Python/frozen_modules/__hello__.h \
 		Python/frozen_modules/__phello__.h \
 		Python/frozen_modules/__phello__.ham.h \
@@ -1827,6 +1829,9 @@ Python/frozen_modules/importlib.machinery.h: Lib/importlib/machinery.py $(FREEZE
 
 Python/frozen_modules/runpy.h: Lib/runpy.py $(FREEZE_MODULE_DEPS)
 	$(FREEZE_MODULE) runpy $(srcdir)/Lib/runpy.py Python/frozen_modules/runpy.h
+
+Python/frozen_modules/fuzzy_runtime.h: Lib/fuzzy_runtime.py $(FREEZE_MODULE_DEPS)
+	$(FREEZE_MODULE) fuzzy_runtime $(srcdir)/Lib/fuzzy_runtime.py Python/frozen_modules/fuzzy_runtime.h
 
 Python/frozen_modules/__hello__.h: Lib/__hello__.py $(FREEZE_MODULE_DEPS)
 	$(FREEZE_MODULE) __hello__ $(srcdir)/Lib/__hello__.py Python/frozen_modules/__hello__.h

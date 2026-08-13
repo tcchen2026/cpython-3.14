@@ -366,6 +366,11 @@
       <IntFile>$(IntDir)runpy.g.h</IntFile>
       <OutFile>$(GeneratedFrozenModulesDir)Python\frozen_modules\runpy.h</OutFile>
     </None>
+    <None Include="..\Lib\fuzzy_runtime.py">
+      <ModName>fuzzy_runtime</ModName>
+      <IntFile>$(IntDir)fuzzy_runtime.g.h</IntFile>
+      <OutFile>$(GeneratedFrozenModulesDir)Python\frozen_modules\fuzzy_runtime.h</OutFile>
+    </None>
     <None Include="..\Lib\__hello__.py">
       <ModName>__hello__</ModName>
       <IntFile>$(IntDir)__hello__.g.h</IntFile>
@@ -425,6 +430,7 @@
     <FrozenModule Include="$(GeneratedFrozenModulesDir)Python\frozen_modules\importlib.util.h" FrozenId="importlib.util" />
     <FrozenModule Include="$(GeneratedFrozenModulesDir)Python\frozen_modules\importlib.machinery.h" FrozenId="importlib.machinery" />
     <FrozenModule Include="$(GeneratedFrozenModulesDir)Python\frozen_modules\runpy.h" FrozenId="runpy" />
+    <FrozenModule Include="$(GeneratedFrozenModulesDir)Python\frozen_modules\fuzzy_runtime.h" FrozenId="fuzzy_runtime" />
     <FrozenModule Include="$(GeneratedFrozenModulesDir)Python\frozen_modules\__hello__.h" FrozenId="__hello__" />
     <FrozenModule Include="$(GeneratedFrozenModulesDir)Python\frozen_modules\__phello__.h" FrozenId="__phello__" />
     <FrozenModule Include="$(GeneratedFrozenModulesDir)Python\frozen_modules\__phello__.ham.h" FrozenId="__phello__.ham" />

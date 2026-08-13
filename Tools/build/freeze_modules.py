@@ -71,6 +71,9 @@ FROZEN = [
         "importlib.machinery",
         "runpy",
     ]),
+    ('fuzzy-cpython runtime', [
+        'fuzzy_runtime',
+    ]),
     (TESTS_SECTION, [
         '__hello__',
         '__hello__ : __hello_alias__',

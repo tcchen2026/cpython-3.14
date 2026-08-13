@@ -80,12 +80,22 @@
             _PyStackRef value_s = GETLOCAL(oparg);
             if (PyStackRef_IsNull(value_s)) {
                 _PyFrame_SetStackPointer(frame, stack_pointer);
-                _PyEval_FormatExcCheckArg(tstate, PyExc_UnboundLocalError,
-                    UNBOUNDLOCAL_ERROR_MSG,
-                    PyTuple_GetItem(_PyFrame_GetCode(frame)->co_localsplusnames, oparg)
-                );
+                PyObject *name = PyTuple_GetItem(
+                    _PyFrame_GetCode(frame)->co_localsplusnames, oparg);
+                PyObject *fuzzy = _PyObject_FuzzyMissingName(name, 1);
                 stack_pointer = _PyFrame_GetStackPointer(frame);
-                JUMP_TO_ERROR();
+                if (fuzzy == NULL) {
+                    if (!_PyErr_Occurred(tstate)) {
+                        _PyFrame_SetStackPointer(frame, stack_pointer);
+                        _PyEval_FormatExcCheckArg(
+                            tstate, PyExc_UnboundLocalError,
+                            UNBOUNDLOCAL_ERROR_MSG, name);
+                        stack_pointer = _PyFrame_GetStackPointer(frame);
+                    }
+                    JUMP_TO_ERROR();
+                }
+                value_s = PyStackRef_FromPyObjectSteal(fuzzy);
+                GETLOCAL(oparg) = value_s;
             }
             value = PyStackRef_DUP(value_s);
             stack_pointer[0] = value;
@@ -3201,7 +3211,11 @@
             }
             else {
                 _PyFrame_SetStackPointer(frame, stack_pointer);
-                PyObject *attr_o = PyObject_GetAttr(PyStackRef_AsPyObjectBorrow(owner), name);
+                PyObject *owner_o = PyStackRef_AsPyObjectBorrow(owner);
+                PyObject *attr_o = PyObject_GetAttr(owner_o, name);
+                if (attr_o == NULL) {
+                    attr_o = _PyObject_FuzzyMissingAttribute(owner_o, name);
+                }
                 stack_pointer = _PyFrame_GetStackPointer(frame);
                 stack_pointer += -1;
                 assert(WITHIN_STACK_BOUNDS());

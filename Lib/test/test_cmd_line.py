@@ -131,6 +131,80 @@ class CmdLineTest(unittest.TestCase):
         opts = get_xoptions('-Xa', '-Xb=c,d=e')
         self.assertEqual(opts, {'a': True, 'b': 'c,d=e'})
 
+    @support.cpython_only
+    def test_fuzzy_xoption(self):
+        code = textwrap.dedent("""
+            import fuzzy_runtime
+            import sys
+            print(fuzzy_runtime.is_enabled())
+            print(fuzzy_runtime.PROTOCOL_VERSION)
+            print(sys._xoptions['fuzzy'])
+        """)
+        for option, expected_value in (('fuzzy', 'True'), ('fuzzy=1', '1')):
+            with self.subTest(option=option):
+                rc, out, err = assert_python_ok('-S', '-X', option, '-c', code)
+                self.assertEqual(out, f'True\n1\n{expected_value}\n'.encode())
+                self.assertEqual(err, b'')
+
+        code = "import sys; print('fuzzy_runtime' in sys.modules)"
+        rc, out, err = assert_python_ok('-S', '-c', code)
+        self.assertEqual(out, b'False\n')
+        self.assertEqual(err, b'')
+        rc, out, err = assert_python_ok('-S', '-X', 'fuzzy=0', '-c', code)
+        self.assertEqual(out, b'False\n')
+        self.assertEqual(err, b'')
+        rc, out, err = assert_python_ok(
+            '-S', '-X', 'fuzzy', '-X', 'fuzzy=0', '-c', code,
+        )
+        self.assertEqual(out, b'False\n')
+        self.assertEqual(err, b'')
+
+        code = "import fuzzy_runtime; print(fuzzy_runtime.is_enabled())"
+        rc, out, err = assert_python_ok(
+            '-S', '-X', 'fuzzy=0', '-X', 'fuzzy', '-c', code,
+        )
+        self.assertEqual(out, b'True\n')
+        self.assertEqual(err, b'')
+
+        standard_hook_code = textwrap.dedent("""
+            import builtins
+            builtins._fuzzy_missing_attribute = (
+                lambda owner, name: 'recovered'
+            )
+            class Value:
+                pass
+            try:
+                print(Value().missing)
+            except AttributeError:
+                print('attribute-error')
+        """)
+        rc, out, err = assert_python_ok('-S', '-c', standard_hook_code)
+        self.assertEqual(out, b'attribute-error\n')
+        self.assertEqual(err, b'')
+
+        fuzzy_hook_code = textwrap.dedent("""
+            import fuzzy_runtime as fuzzy
+            class Value:
+                pass
+            result = Value().missing
+            print(isinstance(result, fuzzy.FuzzyValue))
+            print(result.provenance)
+        """)
+        rc, out, err = assert_python_ok(
+            '-S', '-X', 'fuzzy', '-c', fuzzy_hook_code,
+        )
+        self.assertEqual(
+            out,
+            b'True\nunknown-attribute:Value.missing\n',
+        )
+        self.assertEqual(err, b'')
+
+        rc, out, err = assert_python_failure(
+            '-S', '-X', 'fuzzy=invalid', '-c', 'raise AssertionError',
+        )
+        self.assertIn(b'-X fuzzy must be specified without a value', err)
+        self.assertNotIn(b'AssertionError', err)
+
     def test_showrefcount(self):
         def run_python(*args):
             # this is similar to assert_python_ok but doesn't strip

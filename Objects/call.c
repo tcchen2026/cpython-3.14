@@ -3,6 +3,8 @@
 #include "pycore_ceval.h"         // _Py_EnterRecursiveCallTstate()
 #include "pycore_dict.h"          // _PyDict_FromItems()
 #include "pycore_function.h"      // _PyFunction_Vectorcall() definition
+#include "pycore_fuzzy.h"         // _PyFuzzy_TryCall()
+#include "pycore_interp.h"        // PyInterpreterState
 #include "pycore_modsupport.h"    // _Py_VaBuildStack()
 #include "pycore_object.h"        // _PyCFunctionWithKeywords_TrampolineCall()
 #include "pycore_pyerrors.h"      // _PyErr_Occurred()
@@ -18,6 +20,18 @@ null_error(PyThreadState *tstate)
                          "null argument to internal routine");
     }
     return NULL;
+}
+
+
+static inline int
+maybe_fuzzy_call(PyThreadState *tstate, PyObject *callable,
+                 PyObject **result)
+{
+    PyObject *trusted = tstate->interp->fuzzy.trusted_value_provenances;
+    if (trusted == NULL || PyDict_GET_SIZE(trusted) == 0) {
+        return 0;
+    }
+    return _PyFuzzy_TryCall(tstate, callable, result);
 }
 
 
@@ -205,6 +219,12 @@ _PyObject_MakeTpCall(PyThreadState *tstate, PyObject *callable,
     assert(nargs == 0 || args != NULL);
     assert(keywords == NULL || PyTuple_Check(keywords) || PyDict_Check(keywords));
 
+    PyObject *fuzzy_result = NULL;
+    int fuzzy_call = maybe_fuzzy_call(tstate, callable, &fuzzy_result);
+    if (fuzzy_call != 0) {
+        return fuzzy_call < 0 ? NULL : fuzzy_result;
+    }
+
     /* Slow path: build a temporary tuple for positional arguments and a
      * temporary dictionary for keyword arguments (if any) */
     ternaryfunc call = Py_TYPE(callable)->tp_call;
@@ -342,6 +362,11 @@ _PyObject_Call(PyThreadState *tstate, PyObject *callable,
     assert(!_PyErr_Occurred(tstate));
     assert(PyTuple_Check(args));
     assert(kwargs == NULL || PyDict_Check(kwargs));
+    PyObject *fuzzy_result = NULL;
+    int fuzzy_call = maybe_fuzzy_call(tstate, callable, &fuzzy_result);
+    if (fuzzy_call != 0) {
+        return fuzzy_call < 0 ? NULL : fuzzy_result;
+    }
     EVAL_CALL_STAT_INC_IF_FUNCTION(EVAL_CALL_API, callable);
     vectorcallfunc vector_func = PyVectorcall_Function(callable);
     if (vector_func != NULL) {

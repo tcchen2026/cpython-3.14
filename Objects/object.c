@@ -1286,37 +1286,6 @@ restore:
     return 0;
 }
 
-/*
- * Downstream Atuin research hook.  Normal attribute semantics are unchanged
- * unless the current builtins mapping explicitly contains this callback.
- */
-static PyObject *
-atuin_fuzzy_missing_attribute(PyObject *owner, PyObject *name)
-{
-    if (!PyErr_ExceptionMatches(PyExc_AttributeError)) {
-        return NULL;
-    }
-
-    PyObject *original_exception = PyErr_GetRaisedException();
-    PyObject *hook = NULL;
-    int found = PyMapping_GetOptionalItemString(
-        PyEval_GetBuiltins(), "_atuin_fuzzy_missing_attribute", &hook);
-    if (found <= 0) {
-        PyErr_SetRaisedException(original_exception);
-        return NULL;
-    }
-
-    PyObject *result = PyObject_CallFunctionObjArgs(hook, owner, name, NULL);
-    Py_DECREF(hook);
-    if (result == Py_NotImplemented) {
-        Py_DECREF(result);
-        PyErr_SetRaisedException(original_exception);
-        return NULL;
-    }
-    Py_DECREF(original_exception);
-    return result;
-}
-
 PyObject *
 PyObject_GetAttr(PyObject *v, PyObject *name)
 {
@@ -1347,7 +1316,6 @@ PyObject_GetAttr(PyObject *v, PyObject *name)
 
     if (result == NULL) {
         _PyObject_SetAttributeErrorContext(v, name);
-        result = atuin_fuzzy_missing_attribute(v, name);
     }
     return result;
 }
@@ -1696,10 +1664,6 @@ _PyObject_GetMethod(PyObject *obj, PyObject *name, PyObject **method)
                  tp->tp_name, name);
 
     _PyObject_SetAttributeErrorContext(obj, name);
-    *method = atuin_fuzzy_missing_attribute(obj, name);
-    if (*method != NULL) {
-        return 0;
-    }
     return 0;
 }
 
@@ -1834,13 +1798,6 @@ _PyObject_GetMethodStackRef(PyThreadState *ts, _PyStackRef *self,
                  tp->tp_name, name);
 
     _PyObject_SetAttributeErrorContext(obj, name);
-    PyObject *fuzzy_method = atuin_fuzzy_missing_attribute(obj, name);
-    if (fuzzy_method != NULL) {
-        assert(PyStackRef_IsNull(*method));
-        *method = PyStackRef_FromPyObjectSteal(fuzzy_method);
-        PyStackRef_CLEAR(*self);
-        return 0;
-    }
     assert(PyStackRef_IsNull(*method));
     PyStackRef_CLEAR(*self);
     return -1;

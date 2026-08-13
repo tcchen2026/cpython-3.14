@@ -599,6 +599,15 @@ Miscellaneous options
 
      .. versionadded:: 3.11
 
+   * ``-X fuzzy`` enables fuzzy-cpython's experimental tolerant, single-run
+     execution mode. ``-X fuzzy=1`` also enables it, while ``-X fuzzy=0``
+     explicitly disables it. The mode is disabled by default. Fuzzy execution
+     does not explore alternate branches and is not proof that a program is
+     safe.
+
+     This option is specific to the downstream fuzzy-cpython project and is
+     not part of upstream CPython.
+
    * ``-X perf`` enables support for the Linux ``perf`` profiler.
      When this option is provided, the ``perf`` profiler will be able to
      report Python calls. This option is only available on some platforms and

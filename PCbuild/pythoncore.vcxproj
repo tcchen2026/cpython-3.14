@@ -493,6 +493,7 @@
     <ClCompile Include="..\Modules\_tracemalloc.c" />
     <ClCompile Include="..\Modules\_typesmodule.c" />
     <ClCompile Include="..\Modules\_typingmodule.c" />
+    <ClCompile Include="..\Modules\_fuzzy_runtime.c" />
     <ClCompile Include="..\Modules\timemodule.c" />
     <ClCompile Include="..\Modules\xxsubtype.c" />
     <ClCompile Include="..\Modules\_interpretersmodule.c" />
