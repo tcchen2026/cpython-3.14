@@ -69,4 +69,6 @@ remain documented by CPython's normal `Misc/NEWS.d` process.
 - Added focused standard/fuzzy regression coverage and downstream standalone
   documentation.
 
-No downstream binary or source release has been declared yet.
+No standalone fuzzy-cpython binary or source distribution has been declared
+yet. Embedding projects may separately pin source revisions and publish
+capability-specific artifacts under their own release policy.

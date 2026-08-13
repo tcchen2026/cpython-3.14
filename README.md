@@ -13,20 +13,25 @@ multi-path execution, and a completed run is not proof that a program is safe.
 
 ## Project status
 
-This fork is under active development and is not yet a released fuzzy Python
-distribution. The source tree contains an opt-in `-X fuzzy` activation path,
-project-neutral fuzzy values, bounded events, origin-sensitive import recovery,
-selected missing-name and missing-attribute recovery, and conservative handling
-of unresolved deletion targets. A temporary WASIp1 source candidate exercises
-that work plus a fixed embedding checkpoint import, but no released artifact
-contains it yet.
+This fork is under active development and does not yet publish a standalone
+fuzzy Python distribution. The source tree contains an opt-in `-X fuzzy`
+activation path, project-neutral fuzzy values, bounded events,
+origin-sensitive import recovery, selected missing-name and missing-attribute
+recovery, and conservative handling of unresolved deletion targets.
+
+The source is already usable as a CPython fork and is consumed by Atuin Shell
+Guard through a separately versioned WASIp1 artifact. That consumer artifact is
+not a general fuzzy-cpython binary release: its host capabilities, minimal
+stdlib, packaging, and release record belong to the embedding project.
 
 The current source baseline is Python 3.14.7. Downstream commit
-`7e557250af09e670192f81c30d67eee995d90615` is the initial migration baseline;
-it added an explicitly installed missing-attribute callback at CPython's common
-object and optimized method lookup paths. The source changes after that baseline
-gate all recovery on `-X fuzzy`. Standard mode does not install the runtime or
-consult its recovery callbacks. The current source also narrows fork-owned
+`66ffe2f30635c75beaee5a4afde09738fd28d2eb` is the first complete fork-owned
+runtime revision. Commit `7e557250af09e670192f81c30d67eee995d90615`
+is its initial migration baseline; it added an explicitly installed
+missing-attribute callback at CPython's common object and optimized method
+lookup paths. All recovery after that baseline is gated on `-X fuzzy`.
+Standard mode does not install the runtime or consult its recovery callbacks.
+The current source also narrows fork-owned
 attribute recovery to interpreter attribute-load, optimized method-load, and
 import-from failure points; general attribute C APIs retain ordinary behavior.
 At fuzzy startup, the interpreter captures strong references to the original
@@ -70,10 +75,11 @@ objects are still Python objects; reflective tampering can still fail execution.
 This is a hardened subset, not a claim that all fuzzy semantics are
 non-reflective.
 
-Atuin Shell Guard's current release artifact still supplies fuzzy semantics
-through its injected runtime prelude. Shell Guard has not switched to this
-source candidate, so the source implementation described here and the current
-production integration must not be confused.
+Atuin Shell Guard now enables this fork-owned runtime with `-X fuzzy`. Its thin
+Python bootstrap only configures the analyzed working directory, connects a
+bounded event sink, and executes the supplied source once; it no longer injects
+a competing fuzzy-semantics prelude. Concrete filesystem consequences remain
+authoritative only at Shell Guard's read-only WASI/VFS boundary.
 
 ## Intended mode contract
 
@@ -109,7 +115,7 @@ When enabled, the intended runtime will own:
 - bounded, versioned recovery diagnostics; and
 - explicit limits for fuzzy events and value derivation.
 
-The current source candidate implements the behaviors above for entry code and
+The current source implements the behaviors above for entry code and
 modules beneath one user root while excluding the standard-library root. This
 origin policy and the modified interpreter failure paths still require broader
 native-platform compatibility testing before a release.
@@ -126,7 +132,7 @@ library fallback logic is not silently changed.
 The input program is executed once. Fixed defaults such as false, empty, or
 zero describe that one observed run; they do not cover alternative branches.
 
-Focused fork and Wasm-candidate coverage keeps the opt-in/default-mode split
+Focused fork and consuming-Wasm coverage keeps the opt-in/default-mode split
 consistent for stdin, `-c`, script-file, and `-m` entry points. This does not
 make every package or standard-library module compatible with fuzzy recovery;
 origin rules and unsupported behavior still apply.
@@ -298,8 +304,9 @@ A fork-owned GitHub Actions workflow performs a shallow checkout, regenerates
 and verifies interpreter cases, builds an out-of-tree debug interpreter on
 Linux and macOS, and runs the downstream tests plus affected standard-mode
 import, scope, builtin, and descriptor suites. A workflow file is evidence of
-the intended gate; compatibility is established only after the workflow passes
-at the exact downstream commit.
+the intended gate, not a passing result. The first complete fork-owned revision
+has not yet been published to its canonical remote, so remote CI evidence for
+that exact commit is not yet available.
 
 A release candidate must additionally run the normal CPython test suite for
 its supported native platforms. The consuming Shell Guard repository separately
